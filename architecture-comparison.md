@@ -304,7 +304,7 @@ sequenceDiagram
 
     alt previous_risk != "HIGH" && risk_label == "HIGH"
         S->>+Telegram: _notify_telegram_escalation(...)
-        note over S,Telegram: guarded by try/except; sentry capture on failure
+        note over S,Telegram: guarded by try/except -- sentry capture on failure
         Telegram-->>-S: OK
     end
 
@@ -312,7 +312,7 @@ sequenceDiagram
 
     alt risk_label == "HIGH"
         S->>+Notif: _notify_in_app_high_risk(...)
-        note over S,Notif: guarded by try/except; always fires on HIGH
+        note over S,Notif: guarded by try/except -- always fires on HIGH
         Notif-->>-S: OK
     end
 
