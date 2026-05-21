@@ -270,6 +270,68 @@ flowchart TD
 
 ---
 
+## Zoom In: Refactored score_client Sequence (After SIRA-383)
+
+The following sequence diagram traces the actual runtime call flow through the refactored `score_client` method — each private helper is independently testable, Telegram failures are isolated without losing the result, and Sentry spans are correctly scoped.
+
+```mermaid
+sequenceDiagram
+    actor C as Caller
+    participant S as RiskScoringService<br/>score_client()
+    participant Strat as RiskScoringStrategy
+    participant FES as FeatureEngineeringService
+    participant DB as Supabase
+    participant Telegram
+    participant Notif as NotificationService
+
+    C->>S: score_client(client_id)
+    S->>S: sentry_sdk.isolation_scope()
+
+    S->>+DB: _get_client(client_id)
+    DB-->>-S: (client, previous_risk)
+
+    S->>+FES: _extract_features(client_id)
+    FES-->>-S: features dict
+
+    S->>+Strat: calculate_score(features)
+    Strat-->>-S: (risk_score, risk_label)
+
+    S->>S: sentry set_tag / measurement
+
+    S->>+DB: _persist_score(...)
+    DB-->>-S: log entry
+    note over S,DB: insert_risk_scoring_log + update_client_risk
+
+    alt previous_risk != "HIGH" && risk_label == "HIGH"
+        S->>+Telegram: _notify_telegram_escalation(...)
+        note over S,Telegram: guarded by try/except; sentry capture on failure
+        Telegram-->>-S: OK
+    end
+
+    S-->>S: sentry isolation_scope ends
+
+    alt risk_label == "HIGH"
+        S->>+Notif: _notify_in_app_high_risk(...)
+        note over S,Notif: guarded by try/except; always fires on HIGH
+        Notif-->>-S: OK
+    end
+
+    S->>S: _build_response(...)
+    S-->>C: ScoreRiskResponse
+```
+
+**Key design decisions visible in the sequence:**
+
+| Decision | Rationale |
+|----------|-----------|
+| Telegram inside the Sentry scope | Escalation alert is part of the scoring transaction |
+| In-app notification *outside* the Sentry scope | Non-critical UI update; should not extend transaction duration |
+| Telegram guarded by try/except | Transient API failure should not lose the scoring result |
+| In-app notification always fires on HIGH | Dashboard indicator is silent enough to not need escalation semantics |
+| Strategy pattern delegates scoring | Plug in MLScoringStrategy without touching the service |
+
+---
+
 ## At a Glance
 
 | Aspect | Traditional Monolith (Django) | Your Architecture |
