@@ -49,6 +49,79 @@ flowchart TD
 
 ---
 
+## Zoom In: Risk Scoring Pipeline inside the Monolith
+
+```mermaid
+flowchart TD
+    subgraph FAT["Fat Controller - risks.py (ALL logic mixed together)"]
+        direction TB
+    
+        A["validate_request()"]
+        B["get_client_by_id(id)"]
+        C["get_payments_by_client(id)"]
+        D["calc_delay_score()"]
+        E["calc_overdue_count()"]
+        F["calc_outstanding_amt()"]
+        G["calc_payment_consistency()"]
+        H["calc_invoice_age()"]
+        I["apply_weighted_formula()"]
+        J["determine_risk_label()"]
+        K["insert_risk_scoring_log()"]
+        L["update_client_risk()"]
+        M["if HIGH: send_telegram_alert()"]
+        N["if HIGH: create_notification()"]
+        O["render_json_response()"]
+        
+        A --> B --> C --> D --> E --> F --> G --> H --> I --> J
+        J --> K --> L --> M
+        M --> N --> O
+        L --> O
+    end
+    
+    DB[(Database)]
+    EXT[Telegram API]
+    
+    B -.-> DB
+    C -.-> DB
+    K -.-> DB
+    L -.-> DB
+    M -.-> EXT
+    
+    style FAT fill:#FFEBEE,stroke:#D32F2F,stroke-width:3
+    style A fill:#FFCDD2
+    style B fill:#FFCDD2
+    style C fill:#FFCDD2
+    style D fill:#FFCDD2
+    style E fill:#FFCDD2
+    style F fill:#FFCDD2
+    style G fill:#FFCDD2
+    style H fill:#FFCDD2
+    style I fill:#FFCDD2
+    style J fill:#FFCDD2
+    style K fill:#FFCDD2
+    style L fill:#FFCDD2
+    style M fill:#FFCDD2
+    style N fill:#FFCDD2
+    style O fill:#FFCDD2
+    style DB fill:#FFF3E0
+    style EXT fill:#F3E5F5
+    
+    linkStyle 14,15,16,17,18 stroke:#D32F2F,stroke-width:2,stroke-dasharray:3
+```
+
+**Every responsibility crammed into one layer:**
+- Data access (queries mixed with logic) — steps B, C
+- Feature calculation (5 separate metrics) — steps D-H
+- Scoring formula and thresholds — steps I, J
+- Persistence and updates — steps K, L
+- External side effects (Telegram) — step M
+- In-app notification logic — step N
+- Response rendering — step O
+
+None of these can be reused, tested in isolation, or swapped independently.
+
+---
+
 ## Your Architecture (Decoupled / Three-Tier)
 
 ```mermaid
@@ -112,6 +185,88 @@ flowchart TD
 - **DB Queries are isolated** — data access lives in dedicated files, not mixed with logic
 - **Background worker** — Celery independently calls the same Service Layer (pink node)
 - Each component can be **scaled independently**
+
+---
+
+## Zoom In: Risk Scoring Pipeline in Your Architecture
+
+```mermaid
+flowchart TD
+    subgraph ROUTER["Router Layer (thin)"]
+        R["POST /api/clients/{id}/score"]
+    end
+    
+    subgraph SERVICE["Service Layer"]
+        S["RiskScoringService.score_client(id)"]
+    end
+    
+    subgraph FE["Feature Engineering"]
+        FE_SVC["FeatureEngineeringService.extract_features()"]
+    end
+    
+    subgraph STRATEGY["Strategy (pluggable)"]
+        STRAT["RiskScoringStrategy Protocol"]
+        RB["RuleBasedScoringStrategy"]
+        ML["MLScoringStrategy (future)"]
+    end
+    
+    subgraph QUERIES["DB Queries Layer"]
+        Q_CLIENT["queries/clients/get_client_by_id"]
+        Q_SAVE["queries/risk_scoring/insert_risk_scoring_log"]
+        Q_UPDATE["queries/risk_scoring/update_client_risk"]
+    end
+    
+    subgraph SIDE["Side Effects"]
+        TG["notify_high_risk_flagged() - Telegram"]
+        NOTIF["NotificationService.create() - in-app"]
+    end
+    
+    DB[(Database)]
+    EXT[Telegram API]
+    
+    R --> S
+    S --> FE_SVC
+    S --> STRAT
+    STRAT -.-> RB
+    STRAT -.-> ML
+    S --> Q_CLIENT
+    S --> Q_SAVE
+    S --> Q_UPDATE
+    Q_CLIENT --> DB
+    Q_SAVE --> DB
+    Q_UPDATE --> DB
+    S --> TG
+    S --> NOTIF
+    TG --> EXT
+    NOTIF --> DB
+
+    style R fill:#E3F2FD,stroke:#1565C0
+    style S fill:#F3E5F5,stroke:#7B1FA2
+    style FE_SVC fill:#FFF8E1,stroke:#F57F17
+    style STRAT fill:#FFF8E1,stroke:#F57F17
+    style RB fill:#FFF8E1,stroke:#F57F17
+    style ML fill:#FFF8E1,stroke:#F57F17,stroke-dasharray:3
+    style Q_CLIENT fill:#E0F2F1,stroke:#00695C
+    style Q_SAVE fill:#E0F2F1,stroke:#00695C
+    style Q_UPDATE fill:#E0F2F1,stroke:#00695C
+    style TG fill:#FCE4EC,stroke:#c62828
+    style NOTIF fill:#FCE4EC,stroke:#c62828
+    style DB fill:#FFF3E0,stroke:#E65100
+    style EXT fill:#F3E5F5,stroke:#7B1FA2
+
+    linkStyle 0,1,2,3,4,5,6,7,8,9,10,11 stroke:#1565C0,stroke-width:2
+```
+
+**How it differs from the monolith:**
+
+| Aspect | Monolith Controller | Your Architecture |
+|--------|-------------------|-------------------|
+| **Data access** | Mixed into controller | Isolated in `db/queries/` |
+| **Scoring formula** | Inline in controller function | Pluggable `RiskScoringStrategy` Protocol |
+| **Feature extraction** | Inline calculations | `FeatureEngineeringService` |
+| **Side effects** (Telegram, notifications) | Hard-coded in controller | Dedicated `NotificationService` + `Telegram` |
+| **Reusability** | Cannot reuse without HTTP | Celery worker calls same `score_client()` |
+| **Testability** | Need HTTP request + DB mock | Pure async; inject mock strategy + real DB |
 
 ---
 
