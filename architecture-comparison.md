@@ -4,30 +4,30 @@
 
 ```mermaid
 flowchart TD
-    subgraph "🏠 Single Process (e.g. Django / Rails)"
+    subgraph M1["Single Process (e.g. Django / Rails)"]
         direction TB
         
-        subgraph "URL Router"
+        subgraph MURL["URL Router"]
             URL[urls.py]
         end
         
-        subgraph "View / Controller Layer"
-            VC["View / Controller<br/>(contains business logic)"]
+        subgraph MVC["View / Controller Layer"]
+            VC["View / Controller (contains business logic)"]
         end
         
-        subgraph "Model Layer"
-            M[(Model / ORM<br/>(data access)]
+        subgraph MMODEL["Model Layer"]
+            MDEF[(Model / ORM and data access)]
         end
         
-        subgraph "Template Engine"
-            T["Template (HTML)<br/>(server-side rendering)"]
+        subgraph MTMPL["Template Engine"]
+            T["Template (HTML) server-side rendering"]
         end
         
         URL --> VC
-        VC --> M
-        M --> DB[(Database)]
-        DB --> M
-        M --> VC
+        VC --> MDEF
+        MDEF --> DB[(Database)]
+        DB --> MDEF
+        MDEF --> VC
         VC --> T
     end
 
@@ -53,27 +53,27 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    subgraph "Tier 1: Presentation"
-        REACT["React SPA (Vite)<br/>apps/web/"]
+    subgraph T1["Tier 1: Presentation"]
+        REACT["React SPA (Vite) - apps/web/"]
     end
 
-    subgraph "Tier 2: Application"
+    subgraph T2["Tier 2: Application"]
         direction TB
         
-        subgraph "Router Layer (Thin)"
-            R["FastAPI Router<br/>routers/invoices.py"]
+        subgraph L1["Router Layer (Thin)"]
+            R["FastAPI Router - routers/invoices.py"]
         end
         
-        subgraph "Service Layer (Business Logic)"
-            S["Service Classes<br/>services/invoice_service.py<br/>services/risk_service.py"]
+        subgraph L2["Service Layer (Business Logic)"]
+            S["Service Classes - services/invoice_service.py"]
         end
         
-        subgraph "Strategy Layer (Pluggable)"
-            STRAT["Strategy Protocol<br/>services/risk_service.py<br/>(RiskScoringStrategy)"]
+        subgraph L3["Strategy Layer (Pluggable)"]
+            STRAT["Strategy Protocol - risk_service.py - RiskScoringStrategy"]
         end
         
-        subgraph "DB Queries Layer"
-            Q["Query Functions<br/>db/queries/invoices.py"]
+        subgraph L4["DB Queries Layer"]
+            Q["Query Functions - db/queries/invoices.py"]
         end
         
         R --> S
@@ -81,12 +81,12 @@ flowchart TD
         S --> STRAT
     end
 
-    subgraph "Tier 3: Data"
-        DB[(Supabase / PostgreSQL<br/>supabase/migrations/)]
+    subgraph T3["Tier 3: Data"]
+        DB[(Supabase / PostgreSQL - supabase/migrations/)]
     end
 
-    subgraph "Background Processing"
-        CELERY["Celery Worker<br/>workers/score_all_clients.py"]
+    subgraph BP["Background Processing"]
+        CELERY["Celery Worker - workers/score_all_clients.py"]
     end
 
     REACT -- "JSON API calls" --> R
